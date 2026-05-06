@@ -25,6 +25,9 @@ Key clarifications surfaced by the skill:
 - The Docker field `usage_in_kernelmode` maps to `cpu.mode=system`, not `cpu.mode=kernel`.
 - `user + system ≠ total` is expected behaviour, not a bug.
 
+Full reference for the Docker Stats API response schema:
+https://docs.docker.com/reference/api/engine/version/v1.45/#tag/Container/operation/ContainerStats
+
 ---
 
 ## Example 2: Kubelet Stats API
@@ -47,3 +50,6 @@ Key clarifications surfaced by the skill:
 - Kubelet forwards only `Cpu.Usage.Total` from cAdvisor — user and system mode breakdowns are never exposed.
 - `usageNanoCores` is an instantaneous rate, not a cumulative counter — it does not map to `container.cpu.time`.
 - Any receiver using the Kubelet Summary API (e.g., `kubeletstatsreceiver`) can only produce `container.cpu.time{}` with no `cpu.mode` attribute.
+
+Full reference for the kubelet `/stats/summary` JSON structure:
+https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/kubeletstatsreceiver/testdata/stats-summary.json

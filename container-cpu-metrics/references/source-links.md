@@ -85,6 +85,13 @@ Used by Moby to get container metrics via the containerd task API:
 
 ---
 
+## Docker Engine API (v1.45)
+
+- **Docker Stats API reference** (full response schema for `GET /containers/{id}/stats`):
+  https://docs.docker.com/reference/api/engine/version/v1.45/#tag/Container/operation/ContainerStats
+
+---
+
 ## moby/moby (v28.5.2)
 
 - **CPUUsage API struct** (field definitions with units):
@@ -104,6 +111,8 @@ Used by Moby to get container metrics via the containerd task API:
   https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.151.0/receiver/kubeletstatsreceiver/internal/kubelet/cpu.go#L51-L57
 - **kubeletstatsreceiver metric definition**:
   https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.151.0/receiver/kubeletstatsreceiver/internal/metadata/generated_metrics.go#L290-L297
+- **kubeletstatsreceiver full `/stats/summary` test fixture** (complete JSON response from kubelet):
+  https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/kubeletstatsreceiver/testdata/stats-summary.json
 - **dockerstatsreceiver** (uses Moby CPUUsage struct):
   https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.151.0/receiver/dockerstatsreceiver/receiver.go#L292
 
