@@ -2,15 +2,17 @@
 name: container-cpu-metrics
 description: >
   Cross-technology semantic layer for container CPU metrics. Use this skill whenever working
-  with container CPU time, CPU usage, or CPU mode metrics — regardless of the collection
-  source. Covers Docker Stats API (Moby), Kubelet /stats/summary, cAdvisor Prometheus,
-  OpenTelemetry Semantic Conventions (container.cpu.time, cpu.mode), cgroups v1/v2 kernel
-  sources, and receiver implementations (dockerstats, kubeletstats). Use when answering
-  questions about: what container.cpu.time measures, whether user+system equals total,
-  what cpu.mode values are valid, how to map between APIs, how cgroup version affects
-  CPU metric semantics, or how OTel semconv should model container CPU time. Also use
-  when debugging discrepancies between CPU metrics from different collectors or when
-  designing metric pipelines that combine Kubernetes and Docker sources.
+  with container CPU time, CPU usage, CPU utilization, or CPU mode metrics — regardless of
+  the collection source. Covers Docker Stats API (Moby), Kubelet /stats/summary, cAdvisor
+  Prometheus, OpenTelemetry Semantic Conventions (container.cpu.time, cpu.mode), cgroups
+  v1/v2 kernel sources, and receiver implementations (dockerstats, kubeletstats). Use when
+  answering questions about: what container.cpu.time measures, whether user+system equals
+  total, what cpu.mode values are valid, how to map between APIs, how cgroup version affects
+  CPU metric semantics, how to derive cpu.usage or cpu.utilization from cpu.time, how to
+  convert between cpu.time/usage/utilization, or how OTel semconv should model container CPU
+  time. Also use when debugging discrepancies between CPU metrics from different collectors,
+  when designing metric pipelines that combine Kubernetes and Docker sources, or when
+  computing rate/utilization queries from cumulative CPU counters.
 ---
 
 # Container CPU Metrics — Cross-Technology Semantic Layer
@@ -29,6 +31,7 @@ of how the data is collected.
 **"What cpu.mode values are valid?"** → See [cpu.mode Semantics](#cpumode-semantics)  
 **"How does cgroup version affect things?"** → See [cgroup v1 vs v2](#cgroup-v1-vs-v2-differences)  
 **"What does Kubelet expose?"** → See [Kubelet Path](#kubelet--statssummary-path)  
+**"How to derive usage or utilization from cpu.time?"** → See [Deriving Usage and Utilization](#deriving-usage-and-utilization-from-cputime)  
 **"How to model this in OTel semconv?"** → See [Semconv Design](#otel-semconv-design-guidance)
 
 ---
@@ -196,6 +199,87 @@ files directly.
 | Per-CPU data | Available (`cpuacct.usage_percpu`) | **Not available** in Moby API |
 | Resolution of user/system | 10ms (jiffie-based) | 1 µs |
 | Status | Deprecated (systemd v258, Sep 2025) | Default on all modern distros |
+
+---
+
+## Deriving Usage and Utilization from cpu.time
+
+Per OTel semantic conventions, `*.cpu.time` is the **recommended** (canonical) metric.
+`*.cpu.usage` and `*.cpu.utilization` are **opt-in** derived metrics. Backends and
+dashboards should derive them from `cpu.time` rather than expecting collectors to emit
+them directly.
+
+Guidance: https://github.com/open-telemetry/semantic-conventions/blob/main/docs/non-normative/groups/system/cpu-metrics-guidelines.md
+
+### Requirement levels
+
+| Metric | Requirement level | Description |
+|---|---|---|
+| `*.cpu.time` | **recommended** | Cumulative CPU time in seconds — measured directly from the OS |
+| `*.cpu.usage` | **opt-in** | Rate of CPU consumption in core-seconds — derived from cpu.time |
+| `*.cpu.utilization` | **opt-in** | CPU usage normalized by limit, range [0, 1] — derived from cpu.time |
+| `*.cpu.limit_utilization` | **opt-in** | CPU usage normalized by CPU limit |
+| `*.cpu.request_utilization` | **opt-in** | CPU usage normalized by CPU request |
+
+### cpu.time → cpu.usage
+
+**Usage** is the rate of change of cpu.time over a window, measured in core-seconds:
+
+```
+rate(container.cpu.time[5m]) / (5 * 60)
+```
+
+In PromQL, `rate()` computes the per-second rate of a counter, so the division by
+window size converts to core-seconds. The result tells you "how many CPU cores worth
+of time this container consumed per second over the window."
+
+### cpu.time → cpu.utilization
+
+**Utilization** is usage normalized by the CPU limit, resulting in a [0, 1] range per core:
+
+```
+rate(container.cpu.time[5m]) / (5 * 60) / <cpu_limit>
+```
+
+For Kubernetes pods with CPU limits:
+
+```
+rate(k8s.pod.cpu.time[5m]) / (5 * 60) / k8s.pod.cpu.limit
+```
+
+This gives `k8s.pod.cpu.limit_utilization`. A value of 1.0 means the pod is using 100%
+of its CPU limit.
+
+### Utilization excluding idle states (system-level)
+
+For system-level CPU, utilization as percentage of time in non-idle states:
+
+```
+sum(rate(system.cpu.time{cpu.mode!="idle"}[5m]) without (cpu.mode)) / (5 * 60)
+```
+
+### Total system utilization across all cores
+
+```
+avg(sum(rate(system.cpu.time{cpu.mode!="idle"}[5m])) by (cpu.logical_number)) / (5 * 60)
+```
+
+### Exception: k8s.*.cpu.usage
+
+`k8s.*.cpu.usage` is a special case — the Kubelet Stats API provides `usageNanoCores`
+directly as an instantaneous rate. This is the only `*.cpu.usage` metric that can be
+collected directly rather than derived. However, it remains **opt-in** since it is
+derived internally from `cpu.time` and is not available from other sources like the
+Docker Stats API.
+
+### When to derive vs collect
+
+| Scenario | Approach |
+|---|---|
+| Backend/dashboard needs usage or utilization | Derive from `cpu.time` using rate queries |
+| Kubelet provides `usageNanoCores` and collector wants to emit it | Collect directly as `k8s.*.cpu.usage` (opt-in) |
+| Docker Stats API consumer needs utilization | Derive from `container.cpu.time` — Docker does not provide usage/utilization |
+| Collector implementation | SHOULD emit `cpu.time` by default; SHOULD gate `cpu.usage` and `cpu.utilization` behind config |
 
 ---
 

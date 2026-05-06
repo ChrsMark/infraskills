@@ -53,3 +53,45 @@ Key clarifications surfaced by the skill:
 
 Full reference for the kubelet `/stats/summary` JSON structure:
 https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/kubeletstatsreceiver/testdata/stats-summary.json
+
+---
+
+## Example 3: Deriving CPU Usage and Utilization from cpu.time
+
+**User prompt:**
+> I have `container.cpu.time` from the dockerstatsreceiver. How do I get CPU usage and utilization from it?
+
+**Skill invoked:** `container-cpu-metrics/SKILL.md`
+
+**Response:**
+
+Per the OTel CPU metrics guidelines, `cpu.time` is the canonical metric. Usage and utilization are derived from it:
+
+**CPU Usage** (core-seconds — "how many cores worth of CPU per second"):
+
+```promql
+rate(container.cpu.time[5m]) / (5 * 60)
+```
+
+**CPU Utilization** (normalized to [0, 1] — "fraction of CPU limit consumed"):
+
+```promql
+rate(container.cpu.time[5m]) / (5 * 60) / <cpu_limit>
+```
+
+For a container with a 2-core CPU limit and `container.cpu.time` increasing by 600 seconds over a 5-minute window:
+
+| Step | Formula | Result |
+|---|---|---|
+| Rate of cpu.time | 600s / 300s | 2.0 core-seconds/s |
+| Usage | same as rate | 2.0 (using 2 full cores) |
+| Utilization | 2.0 / 2 (limit) | 1.0 (100% of limit) |
+
+Key clarifications:
+- Docker Stats API does not provide usage or utilization directly — always derive from `container.cpu.time`.
+- `cpu.mode` breakdown (user/system) can also be rated individually: `rate(container.cpu.time{cpu.mode="user"}[5m])`.
+- For Kubernetes pods: `rate(k8s.pod.cpu.time[5m]) / (5*60) / k8s.pod.cpu.limit` gives `k8s.pod.cpu.limit_utilization`.
+- `usageNanoCores` from the Kubelet Stats API is the only `*.cpu.usage` that can be collected directly (opt-in).
+
+OTel CPU metrics guidelines:
+https://github.com/open-telemetry/semantic-conventions/blob/main/docs/non-normative/groups/system/cpu-metrics-guidelines.md

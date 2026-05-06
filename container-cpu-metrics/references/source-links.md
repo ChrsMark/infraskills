@@ -122,6 +122,8 @@ Used by Moby to get container metrics via the containerd task API:
 
 - **`container.cpu.time` metric**: https://opentelemetry.io/docs/specs/semconv/system/container-metrics/#metric-containercputime
 - **`cpu.mode` attribute registry**: https://opentelemetry.io/docs/specs/semconv/registry/attributes/cpu/
+- **CPU metrics guidelines** (cpu.time → usage → utilization derivation, requirement levels):
+  https://github.com/open-telemetry/semantic-conventions/blob/main/docs/non-normative/groups/system/cpu-metrics-guidelines.md
 - **Active discussion**: https://github.com/open-telemetry/semantic-conventions/issues/2418
 
 ---
